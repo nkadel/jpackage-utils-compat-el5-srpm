@@ -5,16 +5,18 @@
 # Assure that sorting is case sensitive
 LANG=C
 
-#MOCKS+=epel-6-i386
+MOCKS+=epel-6-i386
 #MOCKS+=epel-5-i386
 #MOCKS+=epel-4-i386
 
-#MOCKS+=epel-6-x86_64
+MOCKS+=epel-6-x86_64
 MOCKS+=epel-5-x86_64
 #MOCKS+=epel-4-x86_64
 
 SPEC := `ls *.spec | head -1`
 PKGNAME := "`ls *.spec | head -1 | sed 's/.spec$$//g'`"
+
+REPOBASEDIR=/var/www/mirrors/javarepo
 
 all:: verifyspec $(MOCKS)
 
@@ -60,5 +62,22 @@ clean::
 
 realclean distclean:: clean
 	rm -f *.src.rpm
+
+install:: $(MOCKS)
+	@for repo in $(MOCKS); do \
+	    echo Installing $$repo; \
+	    echo "$$repo" | awk -F- '{print $$2,$$3}' | while read yumrelease yumarch; do \
+		rpmdir=$(REPOBASEDIR)/$$yumrelease/$$yumarch; \
+		srpmdir=$(REPOBASEDIR)/$$yumrelease/SRPMS; \
+		echo "Pushing SRPMS to $$srpmdir"; \
+		sudo rsync -av $$repo/*.src.rpm --no-owner --no-group $$repo/*.src.rpm $$srpmdir/. || exit 1; \
+		sudo createrepo -q $$srpmdir/.; \
+		echo "Pushing RPMS to $$rpmdir"; \
+		sudo rsync -av $$repo/*.rpm --exclude=*.src.rpm --exclude=*debuginfo*.rpm --no-owner --no-group $$repo/*.rpm $$rpmdir/. || exit 1; \
+		sudo createrepo -q $$rpmdir/.; \
+	    done; \
+	    echo "Deleting /var/cache/mock/$$repo/to clear cache"; \
+	    sudo rm -rf /var/cache/mock/$$repo/; \
+	done
 
 FORCE:
